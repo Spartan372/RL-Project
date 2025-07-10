@@ -1,17 +1,9 @@
-import gymnasium as gym
-import numpy as np
+
+import Q_Learning_Agent
+
+Balencing_Bob = Q_Learning_Agent.Q_Learning_Agent()
+Balencing_Bob.training(num_episodes = 100000,  max_steps = 500)
+Balencing_Bob.Attempt(attempts = 100)
 
 
-env = gym.make("CartPole-v1", render_mode='human') #Environment and Mode Declaration
-observation, info = env.reset(seed=123) #Initalise Variables
-env.render #Start Window
 
-episode_over = False
-
-while not episode_over:
-    action = env.action_space.sample() # Choose Random Action
-    observation, reward, terminated, truncated, info = env.step(action) #Grab Details of the current state
-    episode_over = terminated or truncated # Or Gate 
-
-
-env.close() #Close Simulation
