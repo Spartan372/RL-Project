@@ -2,125 +2,143 @@ import gymnasium as gym
 import numpy as np
 import time 
 
-class Q_Learning_Agent:
-    def __init__(self, observation_levels = [30, 30, 50, 50], observation_intervals = np.array([0.25, 0.25, 0.01, 0.1])):
-        env = gym.make("CartPole-v1") #Open-AI Environment
-        self.observation_levels = observation_levels #Number of possible values for each observation
-        self.observation_intervals = observation_intervals #Size differnce between each possible observation value 
-        self.q_table = np.random.uniform(low=0, high=1, size=(self.observation_levels + [env.action_space.n])) #Create table for Q-Learning
-        env.close()
+class QLearningAgent:
+    def __init__(self, 
+                observation_quantisation = [30, 30, 50, 50],                # Number of discrete values for each state dimension
+                observation_intervals = np.array([0.25, 0.25, 0.01, 0.1]),  # Value gap for each discrete value 
+                env_name = "CartPole-v1",                                   # Gym Environment specification
+                alpha = 0.9,                                                # Learning Rate - Size of table updates
+                gamma = 0.95,                                               # How important future values are to the Q-Value
+                epsilon = 1,                                                # Exploration rate where 1 = 100% 
+                epsilon_decay = 0.9997,                                     # Reduction rate of epsilon per episode
+                min_epsilon = 0.1):                                         # Minimum value epsilon can reach
+        
+        self.env = gym.make(env_name)                               
+        self.observation_quantisation  = observation_quantisation     # Number of possible values for each observation
+        self.observation_intervals = observation_intervals          # Size difference between each possible observation value 
+        self.env.close()
 
-    def get_discrete_state(self, state):
-        offset = np.array([15,10,1,10])
-        discrete_state = state/self.observation_intervals + offset
+        #Q-Value Table
+        self.q_table = np.random.uniform(low=0, high=1, size=(self.observation_quantisation + [self.env.action_space.n])) #Create table for Q-Learning
+
+        #Add Hyperparameters to the Object
+        self.alpha = alpha
+        self.gamma = gamma
+        self.epsilon = epsilon
+        self.epsilon_decay = epsilon_decay
+        self.min_epsilon = min_epsilon
+    
+    #Rounds each state dimension to the closest discrete value
+    def _get_discrete_state(self, state,  offset = np.array([15,10,1,10])): 
+        discrete_state = state/self.observation_intervals + offset  #Divide each dimension by a value, then add the offset (Avoids negative values)
         return tuple(discrete_state.astype(int))
 
-    def training(self, alpha = 0.9, gamma = 0.95, epsilon = 1, epsilon_decay = 0.9997, min_epsilon = 0.1, num_episodes = 10000, max_steps = 100):
-        
-        #Initalisation of variables
+    #Explore Environment and update Q-Value table accordingly
+    def train(self, num_episodes = 10000):
         env = gym.make("CartPole-v1") #Open-AI Environment
         total_time = 0
         total_reward = 0
 
+        History = []
+
         #Episode Loop
-        for episode in range(num_episodes + 1): #Interate through episodes
+        for episode in range(0, num_episodes):
             
             #Episode level variables
-            inital_time = time.time()                       #set the initial time
-            inital_state, _ = env.reset()              #Grab the unquantised state 
-            state = self.get_discrete_state(inital_state)   #Round the observation into quantised state
-            episode_reward = 0                              #reset reward to 0
+            initial_time = time.time()                          #set the initial time
+            initial_state, _ = env.reset()                      #Grab the raw state 
+            state = self._get_discrete_state(initial_state)     #Round the observation into quantised state
+            episode_reward = 0                                  #reset reward to 0
 
             #Attempt Loop
             done = False #Reset done variable for each attempt
             while not done: 
 
-                #Choose Action
-                if np.random.random() > epsilon: #Randomly choose based on if random is larger then epsilon, 
-                    action = np.argmax(self.q_table[state]) #Take action based on Q-Table
+                #Choose Action based on the epsilon greedy strategy
+                if np.random.random() > self.epsilon:               #Choose best action if random > epsilon
+                    action = np.argmax(self.q_table[state])         #Take action based on Q-Table
                 else:
-                    action = np.random.randint(0, env.action_space.n) #Do a Random Action
+                    action = np.random.randint(0, env.action_space.n) #Choose a Random Action
 
                 #Play out the Action
-                new_state, action_reward, win, loss, _ = env.step(action)  #Step action and recieve data
-                done = win or loss                                          #Merge end variables into one collective variavble
-                episode_reward += action_reward                                    #Add step reward to total reward
-                new_state = self.get_discrete_state(new_state)              #Quantise the state
+                new_state, action_reward, terminated, truncated, _ = env.step(action)   #Step action and receive data
+                done = terminated or truncated                                          #Merge end variables into one collective variable
+                episode_reward += action_reward                                         #Add step reward to total reward
+                new_state = self._get_discrete_state(new_state)                         #Quantise the state
 
-                if not done: #update q-table
-                    Q_Future = np.max(self.q_table[new_state])      #Get the Best possible Q Value for the next State
-                    Q_Current = self.q_table[state + (action,)]     #Get the Current Q Value for State, Action
-                    Q_New = (1 - alpha) * Q_Current + alpha * (action_reward + gamma * Q_Future)
+                #update q-table
+                if not done: 
+                    Q_Future = np.max(self.q_table[new_state])      # Estimate max future reward (greedy)
+                    Q_Current = self.q_table[state + (action,)]     # Get the Current Q Value for State, Action
+                    Q_New = (1 - self.alpha) * Q_Current + self.alpha * (action_reward + self.gamma * Q_Future) #Bellman's Equation
                     self.q_table[state + (action,)] = Q_New
 
                 state = new_state
             
             #Update and print epsilon
-            epsilon = max(min_epsilon, epsilon * epsilon_decay)
-            if episode % 500 == 0:
-                print("Epsilon: " + str(epsilon))
-
-            final_time = time.time() #episode has finished
-            episode_time = final_time - inital_time #episode total time
-            total_time = total_time + episode_time
-
-            total_reward += episode_reward #episode total reward
-
-            #At each 1000 episodes, Print the Average Time and Average Score
-            if episode % 1000 == 0: 
-                print("Time Average: " + str(total_time / 1000))
-                total_time = 0
-
-                print("Mean Reward: " + str(total_reward / 1000))
-                total_reward = 0
+            self.epsilon = max(self.min_epsilon, self.epsilon * self.epsilon_decay)
             
-            #Print Episode Milestone
-            if episode % 2000 == 0: 
-                print("Episode: " + str(episode))
+            episode_time = time.time() - initial_time 
+            total_time = total_time + episode_time #Add episode time to the time taken for all episodes so far
+
+            total_reward += episode_reward # Add the episode reward to the cumulative reward for all episodes so far
+
+            #At each 500 episodes, Print the Average Time and Average Score
+            if episode % 500 == 0: 
+                print(f"[Episode {episode}] Time: {total_time / 500:.4f} s | Mean Reward: {total_reward / 500:.2f} | Epsilon: {self.epsilon:.4f}")
+                total_time = 0
+                total_reward = 0
+
+            #Add episode result to episode history
+            History.append((episode, episode_reward, episode_time))
 
         env.close()
+        return History
 
-    def Attempt(self, attempts = 1):
+    # Run the model without updating value
+    def test(self, attempts = 10, render = True):
+
+        total_reward = 0
         
-        env = gym.make("CartPole-v1", render_mode = 'human') #Open-AI Environment
+        # Determine render mode
+        if render:
+            env = gym.make("CartPole-v1", render_mode = 'human') 
+        else:
+            env = gym.make("CartPole-v1") 
 
-        for attempt in range(1, attempts):
+        #Attempt Loop
+        for attempt in range(1, attempts + 1):
 
-            inital_time = time.time()                       #set the initial time
-            inital_state, _ = env.reset()              #Grab the unquantised state 
-            state = self.get_discrete_state(inital_state)   #Round the observation into quantised state
-            reward = 0                                      #Initalise reward to 0
+            initial_time = time.time()                          #set the initial time
+            initial_state, _ = env.reset()                      #Grab the raw state 
+            state = self._get_discrete_state(initial_state)     #Round the observation into refined state
+            episode_reward = 0                                  #Initialise reward to 0
 
-            #Attempt Loop
+            #Environment Loop
             done = False #Reset done variable for each attempt
             while not done: 
 
-                #Choose Action
+                #Choose Action based on model prediction
                 action = np.argmax(self.q_table[state]) #Take action based on Q-Table
 
                 #Play out the Action
-                new_state, action_reward, win, loss, _ = env.step(action)  #Step action and recieve data
-                done = win or loss                                              #Merge end variables into one collective variavble
-                reward += action_reward                                 #Add step reward to total reward
-                new_state = self.get_discrete_state(new_state)                  #Quantise the state
+                new_state, action_reward, terminated, truncated, _ = env.step(action)       #Step action and receive data
+                done = terminated or truncated                                              #Merge end variables into one collective variable
+                episode_reward += action_reward                                             #Add step reward to total reward
+                new_state = self._get_discrete_state(new_state)                             #Refine the state
 
                 state = new_state
+            
 
-            env.render()
+            final_time = time.time() - initial_time  
+            total_reward += episode_reward          
+            print(f"[Test {attempt}] Time: {final_time:.2f} s | Score: {episode_reward:.2f}")
 
-            #Print Attempt Number
-            print("Attempt Number: ", attempt + 1)
 
-            #Print Time Taken
-            final_time = time.time() #episode has finished
-            total_time = final_time - inital_time #episode total time
-            print('Total Time: ', total_time)
 
-            #Print Score Achieved
-            print("Total Score: ", reward)
-
-        env.close
-        
-
+        env.close()
+        avg_reward = total_reward / attempts
+        print(f"[Test Summary] Average Score: {avg_reward:.2f}")
+        return avg_reward
 
 

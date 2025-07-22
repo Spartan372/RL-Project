@@ -1,9 +1,26 @@
+import gymnasium as gym
 
-import Q_Learning_Agent
+from DQN import DQNAgent
+from Q_Learning_Agent import QLearningAgent
+from DDQN import DDQNAgent
 
-Balencing_Bob = Q_Learning_Agent.Q_Learning_Agent()
-Balencing_Bob.training(num_episodes = 100000,  max_steps = 500)
-Balencing_Bob.Attempt(attempts = 100)
+'''
+print('----------------Q-Learning----------------')
+Balancing_Bob = QLearningAgent()
+History = Balancing_Bob.train(num_episodes = 2500)
+Average_Reward = Balancing_Bob.test(attempts = 5, render=False)
+'''
 
+'''
+print('-------------------DQN--------------------')
+agent = DQNAgent()
+History = agent.train(num_episodes= 200)
+Average_Reward = agent.test(attempts = 2, render=False)
+'''
 
-
+'''
+print('------------------DDQN--------------------')
+agent = DDQNAgent()
+History = agent.train(num_episodes= 200)
+Average_Reward = agent.test(attempts = 2, render=False)
+'''
